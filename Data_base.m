@@ -10,7 +10,6 @@ clear all; clc; close all; % clean up!
 trainingsites = { 'F6'};%, 'F1', 'F2', 'F3','F5'}; % Note, we use the same IDs as in the Nature Machine Intelligence Paper.
 testsites = { 'T1'};%, 'T2', 'T3', 'T4',};
 %allsites = cat(2, trainingsites, testsites );
-
 %%Training 
 [training_data] = dta_loader(trainingsites);
 %%test data 
@@ -102,13 +101,13 @@ for linenumber = 1:99
     [lfr3,poly3] = Labels(site,thermalpath,thermalParams,labels,images,Ms3,3,K);
     [lfr4,poly4] = Labels(site,thermalpath,thermalParams,labels,images,Ms4,4,K);
     lfr(:,:,data_count) = lfr1;
-    poly(:,:,data_count) = poly1;
+    poly(data_count).pos = poly1;
     lfr(:,:,data_count+1) = lfr2;
-    poly(:,:,data_count+1) = poly2;
+    poly(data_count+1).pos = poly2;
     lfr(:,:,data_count+2) = lfr3;
-    poly(:,:,data_count+2) = poly3;
+    poly(data_count+2).pos = poly3;
     lfr(:,:,data_count+3) = lfr4;
-    poly(:,:,data_count+3) = poly4;
+    poly(data_count+3).pos = poly4;
     
     F_count=F_count+1;
    % Labels(site,thermalpath,thermalParams,images,Ms1,1,K);
@@ -127,7 +126,7 @@ function Ms = M_lable(MS,images,R,i_label)
     Ms{i_label} = M;
 end
 
-function [lfr,poly] = Labels(site,thermalpath,thermalParams,labels,images,Ms,flip_direction,K)
+function [lfr,POLY] = Labels(site,thermalpath,thermalParams,labels,images,Ms,flip_direction,K)
 
     refId = (round(length(images)/2))+1; % compute center by taking the average id!
     imgr = undistortImage( imread(fullfile(thermalpath,images(refId).imagefile)), ...
@@ -217,6 +216,7 @@ function [lfr,poly] = Labels(site,thermalpath,thermalParams,labels,images,Ms,fli
     % draw polygon
     
     for i_label = 1:length(labels)
+       length(labels)
        if isempty(labels) || isempty(labels(i_label).poly)
            continue;
        end
@@ -240,6 +240,7 @@ function [lfr,poly] = Labels(site,thermalpath,thermalParams,labels,images,Ms,fli
        end
        %lbl(data_count).poly = poly;    
        %poly = labels(i_label).poly;
+       POLY(:,:,i_label)= poly;
        assert( strcmpi( images(refId).imagefile, labels(i_label).imagefile ), 'something went wrong: imagefile names of label and poses do not match!' );
        drawpolygon( 'Position', poly );
     end
