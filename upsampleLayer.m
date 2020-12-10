@@ -1,8 +1,12 @@
-classdef upsampleLayer < nnet.layer.Layer   
+classdef upsampleLayer < nnet.layer.Layer
     properties
-       
-        % factor to upsample the input.
+       % which dimension should be split
         UpSampleFactor
+    
+    end
+    
+    properties (Learnable)
+       % no learnable parameters 
     end
     
     methods
