@@ -18,7 +18,7 @@ Just put all of these files into the same folder where also the "data" folder is
 2. <b> The "train.m" script</b>: This loads the data and specifies the hyperparameters for the training.
 3. To actually train the network, you then have to run <b>trainNetwork(X,Y,net,options)</b>
 
-I am pretty sure that you will need the Deep Learning toolbox (https://www.mathworks.com/products/deep-learning.html) in order to run some of this code. 
+<b>I am pretty sure that you will need the Deep Learning toolbox</b> (https://www.mathworks.com/products/deep-learning.html) in order to run some of this code. 
 By setting the <i>executionEnvironment</i> variable in the trainingOptions, you can also specify whether to train on CPU or on GPU. Here is further information about this: https://www.mathworks.com/help/deeplearning/ref/trainingoptions.html.
 
 When you run the <b>trainNetwork(X,Y,net,options)</b> command, a second window should open where you can see the training progress. 
