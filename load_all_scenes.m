@@ -25,7 +25,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
     for i_scene = 1:length(scene_struct)
         % getting the z for the entire scene
         z = getAGL(scene_struct(i_scene).name);
-%         try
+        try
             folder = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Images');
             seq_struct = LoadStructureFolderInFolderFiltered(folder, '');
             seq_struct = reduceFolderStructure(seq_struct);
@@ -107,9 +107,10 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                             % each point of frame...
                             for i_pnt = 1:length(frame_4P)
                                 x_o = frame_4P(i_pnt,:);
-                                x_n = (x_o * inv(K) * R + t) * K / z;
-                                x_n(:,end) = [];
-                                lab_struct(i_lab).labels(i_fram).poly(i_pnt,:) = x_n;
+                                x_d = (x_o * inv(K) * R + t) * K / z;
+                                x_n = x_o + x_d;
+                                x_d(:,end) = [];
+                                lab_struct(i_lab).labels(i_fram).poly(i_pnt,:) = x_d;
                             end
                         end
                     catch e
@@ -124,10 +125,10 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
             end
 
             scene_struct(i_scene).seq = seq_struct;
-%         catch e
-%             fprintf('%s\n\r', append('error in scene ', scene_struct(i_scene).name));
-%             fprintf('%s\n\r', append('error message: ', e.message));
-%         end
+        catch e
+            fprintf('%s\n\r', append('error in scene ', scene_struct(i_scene).name));
+            fprintf('%s\n\r', append('error message: ', e.message));
+        end
     end
     sceneStruct = scene_struct;
 end
