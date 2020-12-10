@@ -11,7 +11,7 @@ scene_struct = loadData(data_root_folder, scene_filter);
 %% Loads all scenes and creates a structure
 % seq field of scene_struct is empty if no people are detected, ie. no
 
-function sceneStruct = loadData(data_root_folder, scene_filter)
+%function sceneStruct = loadData(data_root_folder, scene_filter)
     folder = fullfile(data_root_folder, "data");
     params = load(fullfile(folder, 'camParams_thermal.mat'));
     K = params.cameraParams.Intrinsics.IntrinsicMatrix;
@@ -49,6 +49,8 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 
                 % mid label ----------
                 integral = zeros(size(img_struct(1).data),'double');
+                x_max = length(integral(1,:));
+                y_max = length(integral(:,1));
                 label_file_path = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Labels', append('Label', seq_struct(i_seq).name, '.json'));
                 label_mid_struct = jsondecode(fileread(label_file_path));
                 label_mid_struct = label_mid_struct.Labels;
@@ -100,17 +102,48 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
                         lab_struct(i_lab).labels = label_mid_struct;
-                        % for each label frame in mid image label definition...
-                        for i_fram = 1:length(label_mid_struct)
-                            frame_4P = label_mid_struct(i_fram).poly;
+                        % for each label bounding box in mid image label definition...
+                        for i_bb = 1:length(label_mid_struct)
+                            frame_4P = label_mid_struct(i_bb).poly;
                             frame_4P(:,end+1) = z;
                             % each point of frame...
                             for i_pnt = 1:length(frame_4P)
                                 x_o = frame_4P(i_pnt,:);
                                 x_d = (x_o * inv(K) * R + t) * K / z;
                                 x_n = x_o + x_d;
-                                x_d(:,end) = [];
-                                lab_struct(i_lab).labels(i_fram).poly(i_pnt,:) = x_d;
+                                x_n(:,end) = [];
+                                % adapt label bounding boxes to image boarder
+                                % x-value
+                                if x_n(1) < 0  
+                                    x_n(1) = 0;
+                                else
+                                    if x_n(1) > x_max 
+                                        x_n(1) = x_max;
+                                    end
+                                end
+                                % y-value
+                                if x_n(2) < 0  
+                                    x_n(2) = 0;
+                                else
+                                    if x_n(2) > y_max 
+                                        x_n(2) = y_max;
+                                    end
+                                end
+                                lab_struct(i_lab).labels(i_bb).poly(i_pnt,:) = x_n;
+                            end
+                            % check if bounding box has an extension
+                            
+                        end
+                        % erase a bounding box with 0 area
+                        for i_bb = 1:length(lab_struct(i_lab).labels)
+                            if (lab_struct(i_lab).labels(i_bb).poly(1,1) == lab_struct(i_lab).labels(i_bb).poly(2,1) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(2,1) == lab_struct(i_lab).labels(i_bb).poly(3,1) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(3,1) == lab_struct(i_lab).labels(i_bb).poly(4,1)) || ...
+                               (lab_struct(i_lab).labels(i_bb).poly(1,2) == lab_struct(i_lab).labels(i_bb).poly(2,2) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(2,2) == lab_struct(i_lab).labels(i_bb).poly(3,2) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(3,2) == lab_struct(i_lab).labels(i_bb).poly(4,2))
+                                lab_struct(i_lab)
+                                lab_struct(i_lab).labels(i_bb) = [];
                             end
                         end
                     catch e
@@ -131,7 +164,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
         end
     end
     sceneStruct = scene_struct;
-end
+%end
 
 
 %% 
