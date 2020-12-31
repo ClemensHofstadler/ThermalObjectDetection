@@ -1,9 +1,8 @@
-addpath 'util';
-
 clear all; clc; close all; % clean up!
 data_root_folder = 'D:\DATA\Studium JKU\2020W\Computer Vision UE\lab_03';
+%%
+addpath '.\util';
 scene_filter = 'F';
-
 
 %% run
 scene_struct = loadData(data_root_folder, scene_filter); 
@@ -11,7 +10,7 @@ scene_struct = loadData(data_root_folder, scene_filter);
 %% Loads all scenes and creates a structure
 % seq field of scene_struct is empty if no people are detected, ie. no
 
-%function sceneStruct = loadData(data_root_folder, scene_filter)
+function sceneStruct = loadData(data_root_folder, scene_filter)
     folder = fullfile(data_root_folder, "data");
     params = load(fullfile(folder, 'camParams_thermal.mat'));
     K = params.cameraParams.Intrinsics.IntrinsicMatrix;
@@ -71,7 +70,15 @@ scene_struct = loadData(data_root_folder, scene_filter);
                 % calculate relative poses
                 rel_pos_struct = pos_struct;
                 try
-                    i_label = find(ismember({pos_struct.imagefile}, label_mid_struct(1).imagefile));
+                    try 
+                        i_label = find(ismember({pos_struct.imagefile}, label_mid_struct(1).imagefile));
+                    catch ee
+                        if mod(length(pos_struct), 2) == 0
+                            i_label = int8(length(pos_struct) / 2.0);
+                        else
+                            i_label = 1 + int8(length(pos_struct) / 2.0);
+                        end
+                    end
                     R_lab = pos_struct(i_label).M3x4(1:3,1:3)';
                     t_lab = pos_struct(i_label).M3x4(1:3,4)';
                     for i_rel = 1:length(rel_pos_struct)
@@ -164,7 +171,7 @@ scene_struct = loadData(data_root_folder, scene_filter);
         end
     end
     sceneStruct = scene_struct;
-%end
+end
 
 
 %% 
