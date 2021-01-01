@@ -1,15 +1,12 @@
-% FIRST: load/setup the net by running the model.m script
-% THEN: rund this script to train the net
-
-% these parameters are fixed - changing them requires more work
-gridSize = 20;
-inputSize = [454 454 2];
+% FIRST: define the hyperparameters by running the hyperparameters.m script
+% THEN: load/setup the net by running the model.m script
+% THEN: rund this script to set up everything for training
+% THEN: run trained_net = trainNetwork(X,Y,net,options); to actually train
+% the network
 
 % these parameters you can play around with
-%trainingsites = { 'F0', 'F1', 'F2', 'F3', 'F5', 'F6', 'F8', 'F9', 'F10', 'F11' };
-trainingsites = {'F0','F1'};
 maxEpochs = 1;
-miniBatchSize  = 8;
+miniBatchSize  = 32;
 optimizer = 'adam';
 initialLearnRate = 1e-3;
 learnRateDropFactor = 0.1;
@@ -17,7 +14,7 @@ learnRateDropPeriod = 20;
 shuffleFrequency = 'every-epoch';
 executionEnvironment = 'auto';
 
-[X,Y] = loadData(trainingsites,inputSize,gridSize);
+[X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
 
 options = trainingOptions(optimizer, ...
     'MiniBatchSize',miniBatchSize, ...
@@ -36,107 +33,305 @@ options = trainingOptions(optimizer, ...
 
 function labelGrid = generateLabelGrid(label,inputSize,gridSize)
     % set up the label grid
-    boxes_per_line = floor(inputSize(1) / gridSize);
-    labelGrid = zeros(boxes_per_line);
-    for i_label = 1:size(label,3)
-        x_min = min(label(:,1,i_label));
-        x_max = max(label(:,1,i_label));
-        y_min = min(label(:,2,i_label));
-        y_max = max(label(:,1,i_label));
-        for i = 1:boxes_per_line
-            for j = 1:boxes_per_line
-                left_right_inside_box = floor(x_min/gridSize) <= i-1 && i-1 < ceil(x_max/gridSize);
-                up_down_inside_box = floor(y_min/gridSize) <= j-1 && j-1 < ceil(y_max/gridSize);  
-                if left_right_inside_box && up_down_inside_box
-                    labelGrid(i,j) = 1;
+    labelGrid = [];
+    for s = gridSize
+        boxes_per_line = ceil(inputSize(1)/s);
+        currentGrid = zeros(boxes_per_line,boxes_per_line);
+        for i_label = 1:size(label,3)
+            x_min = min(label(:,1,i_label));
+            x_max = max(label(:,1,i_label));
+            y_min = min(label(:,2,i_label));
+            y_max = max(label(:,2,i_label));
+            for i = 1:boxes_per_line
+                for j = 1:boxes_per_line
+                    left_right_inside_box = floor(x_min/s) <= i && i <= ceil(x_max/s);
+                    up_down_inside_box = floor(y_min/s) <= j && j <= ceil(y_max/s);  
+                    if left_right_inside_box && up_down_inside_box
+                        currentGrid(i,j) = 1;
+                    end
                 end
             end
         end
+        labelGrid = [labelGrid
+            currentGrid(:)];
     end
-    labelGrid = labelGrid(:);
 end
 
-function [X,Y] = loadData(sites,inputSize,gridSize)
-    training_data = dta_loader(sites);
-    X = {};
-    Y = [];
-    for i = 1:length(training_data)
-        folder_images = training_data(i).image;
-        folder_poses = training_data(i).cam_param;
-        seqs = cell(size(folder_images,3),1);
-        labels = zeros(size(folder_images,3),floor(inputSize(1) / gridSize)^2);
-        for j = 1:size(folder_images,3)
-            length_seq = dir(['./data/', sites{i}, '/Images/', num2str(ceil(j/4)), '/*.tiff']);
-            length_seq = numel(length_seq);
-            current_seq = zeros([inputSize,[length_seq]]);
-            current_seq(:,:,1,:) = folder_images(:,:,j,1:length_seq);
-            current_seq(1:3,1:4,2,:) = folder_poses(:,:,j,1:length_seq);
-            seqs{j} = current_seq;
-            labels(j,:) = generateLabelGrid(training_data(i).lblpos(j).pos,inputSize,gridSize);
+function [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize)
+    fprintf('Loading data...\n');
+    folder = loadData(data_root_folder, scene_filter);
+    fprintf('Augmenting data...\n');  
+    data = dta_loader(folder);
+    fprintf('Preparing data for training...\n');  
+    [X,Y] = prepDataAux(data,inputSize,gridSize);
+end
+
+function [X,Y] = prepDataAux(data, inputSize, gridSize)
+    num_seqs = 0;
+    for i = 1:length(data)
+        num_seqs = num_seqs + size(data(i).seq,2);
+    end
+    X = cell(num_seqs,1);
+    Y = cell(num_seqs,1);
+    idx = 1;
+    numOutputs = 0;
+    for s = gridSize
+        numOutputs = numOutputs + ceil(inputSize(1)/s)^2; 
+    end
+    for i = 1:length(data)
+        current_folder = data(i).seq;
+        X_from_folder = cell(length(current_folder),1);
+        Y_from_folder = cell(length(current_folder),1);
+        for j = 1:length(current_folder)
+        	current_seq = current_folder(j);
+            seq_len = size(current_seq.image,2);
+            current_X = zeros([inputSize seq_len]);
+            current_Y = zeros([numOutputs seq_len]);  
+            % save images in first dimension and relative poses in second
+            % dimension
+            current_X(:,:,1,:) = permute(current_seq.image,[3 4 2 1]);
+            current_X(1:3,1:4,2,:) = permute(current_seq.cam_param,[3 4 2 1]);
+            % generate label grid and save it
+            for k = 1:seq_len
+                if ~isempty(current_seq.poly{k})
+                    current_Y(:,k) = generateLabelGrid(current_seq.poly{k},inputSize,gridSize);
+                end
+            end
+            X_from_folder{j} = single(current_X);
+            Y_from_folder{j} = single(current_Y);
         end
-        X = [X
-            seqs];
-        Y = [Y
-            labels];
+        X(idx:idx+length(current_folder)-1) = X_from_folder;
+        Y(idx:idx+length(current_folder)-1) = Y_from_folder;
+        idx = idx + length(current_folder);
     end
 end
 
-function [data] = dta_loader(g_site)
+function sceneStruct = loadData(data_root_folder, scene_filter)
+    folder = fullfile(data_root_folder, "data");
+    params = load(fullfile(folder, 'camParams_thermal.mat'));
+    K = params.cameraParams.Intrinsics.IntrinsicMatrix;
+    scene_struct = LoadStructureFolderInFolderFiltered(folder, scene_filter);
+    scene_struct = reduceFolderStructure(scene_struct);
 
-for i_site = 1:length(g_site)
-site = g_site{i_site};
-datapath = fullfile( './data/', site ); 
-if ~isfolder(fullfile( datapath ))
-   error( 'folder %s does not exist. Did you download additional data?', datapath );
+    % add sequence-structure field to scene
+    scene_struct(end).seq = [];
+
+    % add sequence-structures
+    for i_scene = 1:length(scene_struct)
+        % getting the z for the entire scene
+        z = getAGL(scene_struct(i_scene).name);
+        try
+            folder = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Images');
+            seq_struct = LoadStructureFolderInFolderFiltered(folder, '');
+            seq_struct = reduceFolderStructure(seq_struct);
+            % add fields for image, label, pose, and relative pose arrays 
+            seq_struct(end).images = [];
+            seq_struct(end).labels_rect = [];
+            seq_struct(end).poses = [];
+            seq_struct(end).relative_poses = [];
+
+            for i_seq = 1:length(seq_struct)
+                
+                % images ----------
+                folder_seq = fullfile(seq_struct(i_seq).folder, seq_struct(i_seq).name, '*.tiff');
+                img_struct = dir(folder_seq);
+                img_struct = reduceFolderStructure(img_struct);
+                img_struct(end).data = [];
+                for i_img = 1:length(img_struct)
+                    thermalds = datastore(fullfile(img_struct(i_img).folder, img_struct(i_img).name));
+                    img_struct(i_img).data = readimage(thermalds, 1);
+                end
+                
+                % mid label ----------
+                integral = zeros(size(img_struct(1).data),'double');
+                x_max = length(integral(1,:));
+                y_max = length(integral(:,1));
+                label_file_path = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Labels', append('Label', seq_struct(i_seq).name, '.json'));
+                label_mid_struct = jsondecode(fileread(label_file_path));
+                label_mid_struct = label_mid_struct.Labels;
+                % make labels rectangle
+                for i_lab = 1:length(label_mid_struct)
+                    [absBBs, relBBs, ~] = saveLabels({label_mid_struct(i_lab).poly}, size(integral), []);
+                    x1 = absBBs(1,1); 
+                    x2 = absBBs(1,2); 
+                    y1 = absBBs(1,3); 
+                    y2 = absBBs(1,4);
+                    label_mid_struct(i_lab).poly = [[x2 y1];[x1 y1];[x1 y2];[x2 y2]];
+                end
+                
+                % poses -----------
+                poses_file_path = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Poses', append(seq_struct(i_seq).name, '.json'));
+                pos_struct = jsondecode(fileread(poses_file_path));
+                pos_struct = pos_struct.images;
+                % calculate relative poses
+                rel_pos_struct = pos_struct;
+                try
+                    try 
+                        i_label = find(ismember({pos_struct.imagefile}, label_mid_struct(1).imagefile));
+                    catch ee
+                        if mod(length(pos_struct), 2) == 0
+                            i_label = int8(length(pos_struct) / 2.0);
+                        else
+                            i_label = 1 + int8(length(pos_struct) / 2.0);
+                        end
+                    end
+                    R_lab = pos_struct(i_label).M3x4(1:3,1:3)';
+                    t_lab = pos_struct(i_label).M3x4(1:3,4)';
+                    for i_rel = 1:length(rel_pos_struct)
+                        R = R_lab' * rel_pos_struct(i_rel).M3x4(1:3,1:3)';
+                        t = rel_pos_struct(i_rel).M3x4(1:3,4)' - t_lab * R;
+                        rel_pos_struct(i_rel).M3x4(1:3,1:3) = R';
+                        rel_pos_struct(i_rel).M3x4(1:3,4) = t';
+                    end
+                catch e
+                    rel_pos_struct = [];
+                    fprintf('%s\n\r', append('No labels (i.e.no people) in scene ', scene_struct(i_scene).name, ", in sequence ", seq_struct(i_seq).name));  
+                    fprintf('%s\n\r', append('error message: ', e.message));
+                end
+
+                % labels ----------
+                lab_struct = pos_struct;
+                lab_struct = rmfield(lab_struct, 'M3x4');
+                lab_struct(end).labels = [];
+                for i_lab = 1:length(lab_struct)
+                    try
+                        % only for testing
+                        if (i_scene == 8 && i_seq == 5 && i_lab == 16)
+                            i_lab = i_lab;
+                        end
+                        
+                        M = rel_pos_struct(i_lab).M3x4;
+                        % M(4,:) = [0, 0, 0, 1];
+                        R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
+                        t = rel_pos_struct(i_lab).M3x4(1:3,4)';
+                        lab_struct(i_lab).labels = label_mid_struct;
+                        % for each label bounding box in mid image label definition...
+                        for i_bb = 1:length(label_mid_struct)
+                            frame_4P = label_mid_struct(i_bb).poly;
+                            frame_4P(:,end+1) = z;
+                            % each point of frame...
+                            for i_pnt = 1:length(frame_4P)
+                                x_o = frame_4P(i_pnt,:);
+                                x_d = (x_o * inv(K) * R + t) * K / z;
+                                x_n = x_o + x_d;
+                                x_n(:,end) = [];
+                                % adapt label bounding boxes to image boarder
+                                % x-value
+                                if x_n(1) < 0  
+                                    x_n(1) = 0;
+                                else
+                                    if x_n(1) > x_max 
+                                        x_n(1) = x_max;
+                                    end
+                                end
+                                % y-value
+                                if x_n(2) < 0  
+                                    x_n(2) = 0;
+                                else
+                                    if x_n(2) > y_max 
+                                        x_n(2) = y_max;
+                                    end
+                                end
+                                lab_struct(i_lab).labels(i_bb).poly(i_pnt,:) = x_n;
+                            end
+                            % check if bounding box has an extension
+                            
+                        end
+                        % erase a bounding box with 0 area
+                        for i_bb = 1:length(lab_struct(i_lab).labels)
+                            if (lab_struct(i_lab).labels(i_bb).poly(1,1) == lab_struct(i_lab).labels(i_bb).poly(2,1) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(2,1) == lab_struct(i_lab).labels(i_bb).poly(3,1) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(3,1) == lab_struct(i_lab).labels(i_bb).poly(4,1)) || ...
+                               (lab_struct(i_lab).labels(i_bb).poly(1,2) == lab_struct(i_lab).labels(i_bb).poly(2,2) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(2,2) == lab_struct(i_lab).labels(i_bb).poly(3,2) && ...
+                                lab_struct(i_lab).labels(i_bb).poly(3,2) == lab_struct(i_lab).labels(i_bb).poly(4,2))
+                                lab_struct(i_lab)
+                                lab_struct(i_lab).labels(i_bb) = [];
+                            end
+                        end
+                    catch e
+                        fprintf('%s\n\r', append('error message: ', e.message));
+                    end
+                end
+                
+                seq_struct(i_seq).relative_poses = rel_pos_struct;
+                seq_struct(i_seq).poses = pos_struct;
+                seq_struct(i_seq).labels_rect = lab_struct;
+                seq_struct(i_seq).images = img_struct;
+            end
+
+            scene_struct(i_scene).seq = seq_struct;
+        catch e
+            fprintf('%s\n\r', append('error in scene ', scene_struct(i_scene).name));
+            fprintf('%s\n\r', append('error message: ', e.message));
+        end
+    end
+    sceneStruct = scene_struct;
 end
 
-%resultsfolder = fullfile( './results/', site );
-%mkdir(resultsfolder);
+function folderStructFiltered = LoadStructureFolderInFolderFiltered(folder, filterStringPefix)
+    % load scene structure
+    mainStruct = dir(folder);
+    mainStruct(~[mainStruct.isdir]) = [];   % remove non dirs
+    toRemove = ismember( {mainStruct.name}, {'.', '..'});
+    mainStruct(toRemove) = [];  %remove current and parent directory
+    toRemove = false(1, length(mainStruct));
+    filteredList = regexp({mainStruct.name}, filterStringPefix + "\w*", 'match');
+    for i = 1:length(toRemove)
+        if isempty(filteredList{i})
+            toRemove(i) = 1;
+        else
+            toRemove(i) = 0;
+        end
+    end
+    mainStruct(toRemove) = [];  %remove all directories that do not match the filterStringPefix criteria
+    
+    folderStructFiltered = mainStruct;
+end
 
+function s = reduceFolderStructure(s)
+    s = rmfield(s, 'date');
+    s = rmfield(s, 'bytes');
+    s = rmfield(s, 'isdir');
+    s = rmfield(s, 'datenum');
+end
+
+function [data] = dta_loader(Folder)
 thermalParams = load( './data/camParams_thermal.mat' );
-
-%%
+K = thermalParams.cameraParams.IntrinsicMatrix;
+cam_param = thermalParams.cameraParams;
 R1 =[1 0 0;0 1 0;0 0 1];
 R2 =[-1 0 0;0 1 0;0 0 1];
 R3 =[1 0 0;0 -1 0;0 0 1];
 R4 =[-1 0 0;0 -1 0;0 0 1];
-Rs = [454/640 0 0;0 454/512 0;0 0 1]; 
+Rs = [454/640 0 0;0 454/512 0;0 0 1]; %scaling images causes Intrinsic changes
+resize_shape = [454 454];
+
+for i_site = 1:length(Folder)
 % Note: line numbers might not be consecutive and they don't start at index
 % 1. So we loop over the posibilities:
 F_count = 0;
-for linenumber = 1:99
-    
-    if ~isfile(fullfile( datapath, '/Poses/', [num2str(linenumber) '.json'] ))
-        continue % SKIP!
-    end
-    
-    json = readJSON( fullfile( datapath, '/Poses/', [num2str(linenumber) '.json'] ) );
-    images = json.images; clear json;
-    
-    try
-        json = readJSON( fullfile( datapath, '/Labels/', ['Label' num2str(linenumber) '.json'] ) );
-        labels = json.Labels; clear json;
-    catch
-       warning( 'no Labels defined!!!' ); 
-       labels = []; % empty
-    end
-    
-    K = thermalParams.cameraParams.IntrinsicMatrix;
-    K=Rs*K;% intrinsic matrix, is the same for all images
-    Ms1 = {};Ms2 = {};Ms3 = {};Ms4 = {};
 
-    thermalpath = fullfile( datapath, 'Images', num2str(linenumber) );
+for linenumber = 1:length(Folder(i_site).seq)
     
+    images = Folder(i_site).seq(linenumber).images;
+    poses = Folder(i_site).seq(linenumber).relative_poses; %poses are inside .M3x4
+    labels = Folder(i_site).seq(linenumber).labels_rect; % poly is inside .labels, .poly 
+    K=Rs*K;% intrinsic matrix, is the same for all images
+
     data_count = 4*(F_count)+1;
+    seqs = zeros([4 length(images) resize_shape]);
+    cam_params = zeros([4 length(images) 3 4]);
+    line_labels = cell(4,length(images));
+    
     for i_label = 1:length(images)
-       thermal = undistortImage( imread(fullfile(thermalpath,images(i_label).imagefile)), ...
-           thermalParams.cameraParams );
-       
-       thermal=double(thermal);
+       thermal = undistortImage(images(i_label).data,cam_param);
+       thermal = double(thermal);
        thermal = thermal./max(max(thermal));
+       lbl = labels(i_label).labels;
        
        %Normalize Pics
-       I1 = imresize(thermal,[454 454]);     %resize pics
+       I1 = imresize(thermal,resize_shape);     %resize pics
        %figure(1)
        %img = imshow( I1, [] );
        I2 = flip(I1 ,2);  %# horizontal flip
@@ -145,154 +340,88 @@ for linenumber = 1:99
        %figure(4)
        %img = imshow( I4, [] );%# horizontal+vertical flip
        %set(gcf,'position',[0,10,350,350])
-       M1 = R1*images(i_label).M3x4;
+       %i_site
+       %linenumber
+       %i_label
+       M1 = R1*poses(i_label).M3x4;
        M2 = R2*M1; M3 = R3*M1;M4 = R4*M1;
        %R is rotation matrix for flipping
-       img_data(:,:,data_count,i_label) = I1;
-       cam_param(:,:,data_count,i_label) = M1;
-       img_data(:,:,data_count+1,i_label) = I2;
-       cam_param(:,:,data_count+1,i_label) = M2;
-       img_data(:,:,data_count+2,i_label) = I3;
-       cam_param(:,:,data_count+2,i_label) = M3;
-       img_data(:,:,data_count+3,i_label) = I4;
-       cam_param(:,:,data_count+3,i_label) = M4;
-       Ms1 = M_lable(Ms1,images,R1,i_label);
-       Ms2 = M_lable(Ms2,images,R2,i_label);
-       Ms3 = M_lable(Ms3,images,R3,i_label);
-       Ms4 = M_lable(Ms4,images,R4,i_label);
        
+       seqs(1,i_label,1:end,1:end) = I1;
+       seqs(2,i_label,1:end,1:end) = I2;
+       seqs(3,i_label,1:end,1:end) = I3;
+       seqs(4,i_label,1:end,1:end) = I4;
+       
+       cam_params(1,i_label,1:end,1:end) = M1;
+       cam_params(2,i_label,1:end,1:end) = M2;
+       cam_params(3,i_label,1:end,1:end) = M3;
+       cam_params(4,i_label,1:end,1:end) = M4;
+       
+       line_labels{1,i_label} = single(Labels(I1,lbl,1,K));
+       line_labels{2,i_label} = single(Labels(I2,lbl,2,K));
+       line_labels{3,i_label} = single(Labels(I3,lbl,3,K));
+       line_labels{4,i_label} = single(Labels(I4,lbl,4,K));
+      
     end
-    [lfr1,poly1] = Labels(site,thermalpath,thermalParams,labels,images,Ms1,1,K);
-    [lfr2,poly2] = Labels(site,thermalpath,thermalParams,labels,images,Ms2,2,K);
-    [lfr3,poly3] = Labels(site,thermalpath,thermalParams,labels,images,Ms3,3,K);
-    [lfr4,poly4] = Labels(site,thermalpath,thermalParams,labels,images,Ms4,4,K);
-    lfr(:,:,data_count) = lfr1;
-    rect(data_count).pos = poly1;
-    lfr(:,:,data_count+1) = lfr2;
-    rect(data_count+1).pos = poly2;
-    lfr(:,:,data_count+2) = lfr3;
-    rect(data_count+2).pos = poly3;
-    lfr(:,:,data_count+3) = lfr4;
-    rect(data_count+3).pos = poly4;
+    data(i_site).seq(data_count).image = single(seqs(1,1:end,1:end,1:end));
+    data(i_site).seq(data_count+1).image = single(seqs(2,1:end,1:end,1:end));
+    data(i_site).seq(data_count+2).image = single(seqs(3,1:end,1:end,1:end));
+    data(i_site).seq(data_count+3).image = single(seqs(4,1:end,1:end,1:end));
+    
+    data(i_site).seq(data_count).cam_param = single(cam_params(1,1:end,1:end,1:end));
+    data(i_site).seq(data_count+1).cam_param = single(cam_params(2,1:end,1:end,1:end));
+    data(i_site).seq(data_count+2).cam_param = single(cam_params(3,1:end,1:end,1:end));
+    data(i_site).seq(data_count+3).cam_param = single(cam_params(4,1:end,1:end,1:end));
+    
+    data(i_site).seq(data_count).poly = line_labels(1,:);
+    data(i_site).seq(data_count+1).poly = line_labels(2,:);
+    data(i_site).seq(data_count+2).poly = line_labels(3,:);
+    data(i_site).seq(data_count+3).poly = line_labels(4,:);
+    
     F_count=F_count+1;
 
    % Labels(site,thermalpath,thermalParams,images,Ms1,1,K);
 end
-data(i_site).lblimage = lfr;
-data(i_site).lblpos = rect;
-data(i_site).image = img_data;
-data(i_site).cam_param = cam_param;
-vars = {'rect','lfr','img_data','cam_param','Ms1','Ms2','Ms3','Ms4'};
-clear(vars{:})
 end
+clear Folder;
 end
 
-function Ms = M_lable(MS,images,R,i_label)
-    Ms = MS;
-    M = R*images(i_label).M3x4;
-    M(4,:) = [0,0,0,1];
-    Ms{i_label} = M;
-end
-
-function [lfr,POLY] = Labels(site,thermalpath,thermalParams,labels,images,Ms,flip_direction,K)
-
-    refId = (round(length(images)/2))+1; % compute center by taking the average id!
-    imgr = undistortImage( imread(fullfile(thermalpath,images(refId).imagefile)), ...
-           thermalParams.cameraParams );
-    imgr=double(imgr);
-    imgr = imgr./max(max(imgr));
-    imgr = imresize(imgr,[454 454]);
+function [POLY] = Labels(image,label,flip_direction,K)
     
-    if flip_direction == 1
-        imgr = imgr;
-    end
-    if flip_direction == 2
-           imgr = flip(imgr ,2);%Horizontal
-    end
-    if flip_direction == 3
-           imgr = flip(imgr ,1);%Vertical
-    end
-    if flip_direction == 4
-           imgr = flip(imgr ,2);
-           imgr = flip(imgr ,1);%both
-    end
-        
-    M1 = Ms{refId};
-    R1 = M1(1:3,1:3)';
-    t1 = M1(1:3,4)';
-    range = [min(imgr(:)), max(imgr(:))];
-    integral = zeros(size(imgr),'double');
-    count = zeros(size(imgr),'double');
-
-    for i_label = 1:length(images)
-        img2 = undistortImage( imread(fullfile(thermalpath,images(i_label).imagefile)), ...
-               thermalParams.cameraParams );
-        img2=double(img2);
-        img2 = img2./max(max(img2));
-        img2 = imresize(img2,[454 454]);
-        if flip_direction == 1
-            img2 = img2;
-        end
-        if flip_direction == 2
-           img2 = flip(img2 ,2);%Horizontal
-        end
-        if flip_direction == 3
-           img2 = flip(img2 ,1);%Vertical
-        end
-        if flip_direction == 4
-           img2 = flip(img2 ,2);
-           img2 = flip(img2 ,1);%both
-        end
-
-        M2 = Ms{i_label};
-        R2 = M2(1:3,1:3)';
-        t2 = M2(1:3,4)';
-
-        % relative 
-        R = R1' * R2;
-        t = t2 - t1 * R;
-        z = getAGL( site ); % meters
-        % the checkerboard is ~900 millimeters away
-        % the tree in the background is ~100000 millimeters (100 m)
-        P = (inv(K) * R * K ); 
-        P_transl =  (t * K);
-        P_ = P; % copy
-        P_(3,:) = P_(3,:) + P_transl./z; % add translation
-        tform = projective2d( P_ );
-
-        % --- warp images ---
-        % warp onto reference image
-        warped2 = double(imwarp(img2,tform.invert(), 'OutputView',imref2d(size(imgr))));
-        warped2(warped2==0) = NaN; % border introduced by imwarp are replaced by nan
-
-        count(~isnan(warped2)) = count(~isnan(warped2)) + 1;
-        integral(~isnan(warped2)) = integral(~isnan(warped2)) + warped2(~isnan(warped2));
-
-    end
-    lfr = integral ./ count;
-    %h_fig = figure(100+linenumber); clf; % continue figure ...
-    %set( h_fig, 'name', sprintf( '%s line %d', site, linenumber ) );
-    %figure(2)
-    %imshow( lfr, [] );
-    %lbl(data_count).image = lfr;
-
-
-    % project labels
-    %figure(2);
     K_ = K; K_(4,4) = 1.0; % make sure intrinsic is 4x4
 
     % draw polygon
-    
-    for i_label = 1:length(labels)
-       if isempty(labels) || isempty(labels(i_label).poly)
+    POLY = zeros(4,2,length(label));
+    %figure(1)
+    %imshow(image,[])
+    for i_label = 1:length(label)
+       
+       if isempty(label) || isempty(label(i_label).poly)
            continue;
        end
        
-       x = labels(i_label).poly(:,1);
-       y = labels(i_label).poly(:,2);
+       x = label(i_label).poly(:,1);
+       y = label(i_label).poly(:,2);
+       
        if all(x)==0 && all(y)==0
            continue
        end
+       if x(1)==x(2) || y(1)==y(3)
+           x(1)=x(1)+1;x(4)=x(4)+1;
+           x(2,1)=x(2)-1;x(3,1)=x(3)-1;
+           y(1)=y(1)+1;y(2)=y(2)+1;
+           y(3)=y(3)-1;y(4)=y(4)-1;
+       end
+       if any(x)==0 
+           x(1)=x(1)+0.02;x(4)=x(4)+0.02;
+           x(2,1)=x(2)+0.01;x(3,1)=x(3)+0.01;
+       end
+       if any(y)==0 
+           y(1)=y(1)+0.02;y(2)=y(2)+0.02;
+           y(3)=y(3)+0.01;y(4)=y(4)+0.01;
+       end
+        
+       
        polyin = polyshape({x},{y});
        [pol_x,pol_y] = boundingbox(polyin,1);
        poly_x = [pol_x(1);pol_x(1);pol_x(2);pol_x(2)];
@@ -318,10 +447,13 @@ function [lfr,POLY] = Labels(site,thermalpath,thermalParams,labels,images,Ms,fli
            poly = (454/2)*[1 1;1 1;1 1;1 1]+new_pos;
        end
        %lbl(data_count).poly = poly;    
-       %poly = labels(i_label).poly;
-       POLY(:,:,i_label)= poly;
-       assert( strcmpi( images(refId).imagefile, labels(i_label).imagefile ), 'something went wrong: imagefile names of label and poses do not match!' );
-       drawpolygon( 'Position', poly );
+       %poly = label(i_label).poly;
+       POLY(:,:,i_label) = poly;
+       %drawpolygon( 'Position', poly );
+       %title(num2str(i_label));
+       %hold on
     end
-
+    %hold off
+    
+    
 end

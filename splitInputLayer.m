@@ -14,7 +14,7 @@ classdef splitInputLayer < nnet.layer.Layer
             layer.Name = name;
             
             % Set layer description.
-            layer.Description = "Splits the input at the color-dimension."
+            layer.Description = "Splits the input at the color-dimension.";
             
             layer.NumOutputs = 2;
             

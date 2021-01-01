@@ -1,18 +1,3 @@
-%%%% HYPERPARAMETERS %%%%%
-% Input size of our images - W x H x Color dimension
-inputSize = [454 454 2];
-% Number of hidden units in the RNN layers
-numHiddenUnits1 = 1000;
-numHiddenUnits2 = 500;
-% divide image into a grid of 20x20 boxes and regress 
-% confidene for each box 
-gridSize = 20;
-% Number of outputs of regression layer 
-numOutputs = floor(inputSize(1) / gridSize)^2;
-% widths and heights of anchor boxes
-anchorBoxes = [10 10
-    20 20];
-
 % The layers of our main model
 layersPreCNN = [ ...
     %%%% INPUT PREP %%%%%
@@ -22,20 +7,23 @@ layersPreCNN = [ ...
     sequenceFoldingLayer('Name','my_fold')
     ];
     
-    %%%% CNN %%%%%
-    % apply our CNN independently to each time step
-    % we define the CNN seperately
-    lgraph_yolo = setUpYolo(anchorBoxes);
+%%%% CNN %%%%%
+% apply our CNN independently to each time step
+% we define the CNN seperately
+lgraph_yolo = setUpYolo(anchorBoxes);
     
-     %%%% RNN $$$$$
- layersRNN = [...
+%%%% RNN $$$$$
+layersRNN = [...
     bilstmLayer(numHiddenUnits1,'Name','my_bilstm1')
     reluLayer('Name','my_relu1')
-    bilstmLayer(numHiddenUnits2,'OutputMode','last','Name','my_bilstm2')
+    dropoutLayer(0.2,'Name','my_drop1')
+    bilstmLayer(numHiddenUnits2,'OutputMode','sequence','Name','my_bilstm2')
     reluLayer('Name','my_relu2')
+    dropoutLayer(0.2,'Name','my_drop2')
     
     %%% OUTPUT REGRESSION %%%%%
     fullyConnectedLayer(numOutputs,'Name','my_fc')
+    sigmoidLayer('Name','my_sigmoid')
     regressionLayer('Name','my_regression')];
 
 % add pre CNN part and connect
