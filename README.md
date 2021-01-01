@@ -17,7 +17,7 @@ In order to train our first model, you need the files
 Just put all of these files into the same folder where also the "data" folder is, then run
 1. <b> The "hyperparameters.m" script</b>. This defines some basic hyperparameters which are needed for everything else.
 2. <b>The "model.m" script</b>. This creates our network and saves it in a variable named <i>net</i>. You can analyze the network by calling <i>analyzeNetwork(net)</i>.
-3. <b> The "train.m" script</b>: This loads and prepares the data and specifies the hyperparameters for training.
+3. <b> The "train.m" script</b>: This loads and prepares the data and specifies the hyperparameters for training. Note: loading and preparing the data takes around 3 mins.
 3. To actually train the network, you then have to run <b>trained_network = trainNetwork(X,Y,net,options)</b>.
 
 <b>I am pretty sure that you will need the Deep Learning toolbox</b> (https://www.mathworks.com/products/deep-learning.html) in order to run some of this code. 
