@@ -2,7 +2,7 @@ clear all; clc; close all; % clean up!
 data_root_folder = 'D:\DATA\Studium JKU\2020W\Computer Vision UE\lab_03';
 %%
 addpath '.\util';
-scene_filter = 'F';
+scene_filter = 'F8';
 
 %% run
 scene_struct = loadData(data_root_folder, scene_filter); 
@@ -24,6 +24,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
     for i_scene = 1:length(scene_struct)
         % getting the z for the entire scene
         z = getAGL(scene_struct(i_scene).name);
+        drift = -getDrift(scene_struct(i_scene).name);
         try
             folder = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Images');
             seq_struct = LoadStructureFolderInFolderFiltered(folder, '');
@@ -81,11 +82,13 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                     end
                     R_lab = pos_struct(i_label).M3x4(1:3,1:3)';
                     t_lab = pos_struct(i_label).M3x4(1:3,4)';
+                    i = 1;
                     for i_rel = 1:length(rel_pos_struct)
                         R = R_lab' * rel_pos_struct(i_rel).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_rel).M3x4(1:3,4)' - t_lab * R;
                         rel_pos_struct(i_rel).M3x4(1:3,1:3) = R';
                         rel_pos_struct(i_rel).M3x4(1:3,4) = t';
+                        i = i + 1;
                     end
                 catch e
                     rel_pos_struct = [];
@@ -100,7 +103,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 for i_lab = 1:length(lab_struct)
                     try
                         % only for testing
-                        if (i_scene == 8 && i_seq == 5 && i_lab == 16)
+                        if (i_seq == 13 && i_lab == 1)
                             i_lab = i_lab;
                         end
                         
@@ -108,6 +111,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                         % M(4,:) = [0, 0, 0, 1];
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
+                        t(1) = t(1) + drift * (i_label - i);
                         lab_struct(i_lab).labels = label_mid_struct;
                         % for each label bounding box in mid image label definition...
                         for i_bb = 1:length(label_mid_struct)
@@ -202,3 +206,11 @@ function s = reduceFolderStructure(s)
     s = rmfield(s, 'isdir');
     s = rmfield(s, 'datenum');
 end
+
+
+
+
+
+
+
+
