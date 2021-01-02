@@ -6,7 +6,7 @@
 % them 
 
 %DATA(num of folder).seq.(num of data).(image,cam_param,poly)
-%image gives data of the image 454*454
+%image gives data of the image 227*227
 %cam_param gives relative poses
 %poly gives label location (4*2*num of poly)
 
@@ -60,7 +60,7 @@ R1 =[1 0 0;0 1 0;0 0 1];
 R2 =[-1 0 0;0 1 0;0 0 1];
 R3 =[1 0 0;0 -1 0;0 0 1];
 R4 =[-1 0 0;0 -1 0;0 0 1];
-Rs = [454/640 0 0;0 454/512 0;0 0 1]; %scaling images causes Intrinsic changes
+Rs = [227/640 0 0;0 227/512 0;0 0 1]; %scaling images causes Intrinsic changes
 
 for i_site = 1:length(Folder)
 
@@ -84,7 +84,7 @@ for linenumber = 1:length(Folder(i_site).seq)
        lbl = labels(i_label).labels;
        
        %Normalize Pics
-       I1 = imresize(thermal,[454 454]);     %resize pics
+       I1 = imresize(thermal,[227 227]);     %resize pics
        %figure(1)
        %img = imshow( I1, [] );
        I2 = flip(I1 ,2);  %# horizontal flip
@@ -165,22 +165,22 @@ function [POLY] = Labels(image,label,flip_direction,K)
        
        
        %change the scale of label position
-       moved_POS = [(454/640).*poly_x,... 
-                    (454/512).*poly_y];
+       moved_POS = [(227/640).*poly_x,... 
+                    (227/512).*poly_y];
        if flip_direction == 1
            poly = moved_POS;
        end
        if flip_direction == 2
-           new_pos = (454/2)*[1;1;1;1 ]-moved_POS(:,1);
-           poly = [(454/2)*[1;1;1;1]+new_pos,moved_POS(:,2)];
+           new_pos = (227/2)*[1;1;1;1 ]-moved_POS(:,1);
+           poly = [(227/2)*[1;1;1;1]+new_pos,moved_POS(:,2)];
        end
        if flip_direction == 3
-           new_pos = (454/2)*[1;1;1;1 ]-moved_POS(:,2);
-           poly = [moved_POS(:,1),(454/2)*[1;1;1;1]+new_pos];
+           new_pos = (227/2)*[1;1;1;1 ]-moved_POS(:,2);
+           poly = [moved_POS(:,1),(227/2)*[1;1;1;1]+new_pos];
        end
        if flip_direction == 4
-           new_pos = (454/2)*[1 1;1 1;1 1;1 1]-moved_POS;
-           poly = (454/2)*[1 1;1 1;1 1;1 1]+new_pos;
+           new_pos = (227/2)*[1 1;1 1;1 1;1 1]-moved_POS;
+           poly = (227/2)*[1 1;1 1;1 1;1 1]+new_pos;
        end
        %lbl(data_count).poly = poly;    
        %poly = label(i_label).poly;
