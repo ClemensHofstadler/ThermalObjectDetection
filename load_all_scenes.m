@@ -2,7 +2,7 @@ clear all; clc; close all; % clean up!
 data_root_folder = 'D:\DATA\Studium JKU\2020W\Computer Vision UE\lab_03';
 %%
 addpath '.\util';
-scene_filter = 'F8';
+scene_filter = 'F6';
 
 %% run
 scene_struct = loadData(data_root_folder, scene_filter); 
@@ -82,13 +82,11 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                     end
                     R_lab = pos_struct(i_label).M3x4(1:3,1:3)';
                     t_lab = pos_struct(i_label).M3x4(1:3,4)';
-                    i = 1;
                     for i_rel = 1:length(rel_pos_struct)
                         R = R_lab' * rel_pos_struct(i_rel).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_rel).M3x4(1:3,4)' - t_lab * R;
                         rel_pos_struct(i_rel).M3x4(1:3,1:3) = R';
                         rel_pos_struct(i_rel).M3x4(1:3,4) = t';
-                        i = i + 1;
                     end
                 catch e
                     rel_pos_struct = [];
@@ -100,10 +98,11 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 lab_struct = pos_struct;
                 lab_struct = rmfield(lab_struct, 'M3x4');
                 lab_struct(end).labels = [];
+                i = 1;
                 for i_lab = 1:length(lab_struct)
                     try
                         % only for testing
-                        if (i_seq == 13 && i_lab == 1)
+                        if (i_seq == 1 && i_lab == 1)
                             i_lab = i_lab;
                         end
                         
@@ -112,6 +111,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
                         t(1) = t(1) + drift * (i_label - i);
+                        i = i + 1;
                         lab_struct(i_lab).labels = label_mid_struct;
                         % for each label bounding box in mid image label definition...
                         for i_bb = 1:length(label_mid_struct)
