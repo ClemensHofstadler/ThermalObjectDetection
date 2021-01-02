@@ -14,7 +14,7 @@ lgraph_yolo = setUpYolo(anchorBoxes);
     
 %%%% RNN $$$$$
 layersRNN = [...
-    bilstmLayer(numHiddenUnits1,'Name','my_bilstm1')
+    bilstmLayer(numHiddenUnits1,'OutputMode','sequence','Name','my_bilstm1')
     reluLayer('Name','my_relu1')
     dropoutLayer(0.2,'Name','my_drop1')
     bilstmLayer(numHiddenUnits2,'OutputMode','sequence','Name','my_bilstm2')

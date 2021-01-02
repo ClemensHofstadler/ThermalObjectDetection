@@ -6,13 +6,13 @@
 
 % these parameters you can play around with
 maxEpochs = 1;
-miniBatchSize  = 32;
+miniBatchSize  = 8;
 optimizer = 'adam';
 initialLearnRate = 1e-3;
 learnRateDropFactor = 0.1;
 learnRateDropPeriod = 20;
 shuffleFrequency = 'every-epoch';
-executionEnvironment = 'cpu';
+executionEnvironment = 'auto';
 
 [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
 
@@ -61,7 +61,7 @@ function [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize
     fprintf('Loading data...\n');
     folder = loadData(data_root_folder, scene_filter);
     fprintf('Augmenting data...\n');  
-    data = dta_loader(folder);
+    data = dta_loader(folder, inputSize);
     fprintf('Preparing data for training...\n');  
     [X,Y] = prepDataAux(data,inputSize,gridSize);
 end
@@ -120,7 +120,6 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
     for i_scene = 1:length(scene_struct)
         % getting the z for the entire scene
         z = getAGL(scene_struct(i_scene).name);
-        drift = -getDrift(scene_struct(i_scene).name);
         try
             folder = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Images');
             seq_struct = LoadStructureFolderInFolderFiltered(folder, '');
@@ -194,20 +193,17 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 lab_struct = pos_struct;
                 lab_struct = rmfield(lab_struct, 'M3x4');
                 lab_struct(end).labels = [];
-                i = 1;
                 for i_lab = 1:length(lab_struct)
                     try
                         % only for testing
-                        %if (i_scene == 8 && i_seq == 5 && i_lab == 16)
-                        %    i_lab = i_lab;
-                        %end
+                        if (i_scene == 8 && i_seq == 5 && i_lab == 16)
+                            i_lab = i_lab;
+                        end
                         
                         M = rel_pos_struct(i_lab).M3x4;
                         % M(4,:) = [0, 0, 0, 1];
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
-                        t(1) = t(1) + drift * (i_label - i);
-                        i = i + 1;
                         lab_struct(i_lab).labels = label_mid_struct;
                         % for each label bounding box in mid image label definition...
                         for i_bb = 1:length(label_mid_struct)
@@ -300,7 +296,7 @@ function s = reduceFolderStructure(s)
     s = rmfield(s, 'datenum');
 end
 
-function [data] = dta_loader(Folder)
+function [data] = dta_loader(Folder, inputSize)
 thermalParams = load( './data/camParams_thermal.mat' );
 K = thermalParams.cameraParams.IntrinsicMatrix;
 cam_param = thermalParams.cameraParams;
@@ -308,8 +304,8 @@ R1 =[1 0 0;0 1 0;0 0 1];
 R2 =[-1 0 0;0 1 0;0 0 1];
 R3 =[1 0 0;0 -1 0;0 0 1];
 R4 =[-1 0 0;0 -1 0;0 0 1];
-Rs = [454/640 0 0;0 454/512 0;0 0 1]; %scaling images causes Intrinsic changes
-resize_shape = [454 454];
+Rs = [inputSize(1)/640 0 0;0 inputSize(2)/512 0;0 0 1]; %scaling images causes Intrinsic changes
+resize_shape = inputSize(1:2);
 
 for i_site = 1:length(Folder)
 % Note: line numbers might not be consecutive and they don't start at index
@@ -361,10 +357,10 @@ for linenumber = 1:length(Folder(i_site).seq)
        cam_params(3,i_label,1:end,1:end) = M3;
        cam_params(4,i_label,1:end,1:end) = M4;
        
-       line_labels{1,i_label} = single(Labels(I1,lbl,1,K));
-       line_labels{2,i_label} = single(Labels(I2,lbl,2,K));
-       line_labels{3,i_label} = single(Labels(I3,lbl,3,K));
-       line_labels{4,i_label} = single(Labels(I4,lbl,4,K));
+       line_labels{1,i_label} = single(Labels(lbl,1,K,resize_shape));
+       line_labels{2,i_label} = single(Labels(lbl,2,K,resize_shape));
+       line_labels{3,i_label} = single(Labels(lbl,3,K,resize_shape));
+       line_labels{4,i_label} = single(Labels(lbl,4,K,resize_shape));
       
     end
     data(i_site).seq(data_count).image = single(seqs(1,1:end,1:end,1:end));
@@ -390,7 +386,7 @@ end
 clear Folder;
 end
 
-function [POLY] = Labels(image,label,flip_direction,K)
+function [POLY] = Labels(label,flip_direction,K,inputSize)
     
     K_ = K; K_(4,4) = 1.0; % make sure intrinsic is 4x4
 
@@ -407,7 +403,7 @@ function [POLY] = Labels(image,label,flip_direction,K)
        x = label(i_label).poly(:,1);
        y = label(i_label).poly(:,2);
        
-       if all(x)==0 && all(y)==0
+       if all(x==0) && all(y==0)
            continue
        end
        if x(1)==x(2) || y(1)==y(3)
@@ -416,11 +412,11 @@ function [POLY] = Labels(image,label,flip_direction,K)
            y(1)=y(1)+1;y(2)=y(2)+1;
            y(3)=y(3)-1;y(4)=y(4)-1;
        end
-       if any(x)==0 
+       if any(x==0) 
            x(1)=x(1)+0.02;x(4)=x(4)+0.02;
            x(2,1)=x(2)+0.01;x(3,1)=x(3)+0.01;
        end
-       if any(y)==0 
+       if any(y==0)
            y(1)=y(1)+0.02;y(2)=y(2)+0.02;
            y(3)=y(3)+0.01;y(4)=y(4)+0.01;
        end
@@ -433,22 +429,22 @@ function [POLY] = Labels(image,label,flip_direction,K)
        
        
        %change the scale of label position
-       moved_POS = [(454/640).*poly_x,... 
-                    (454/512).*poly_y];
+       moved_POS = [(inputSize(1)/640).*poly_x,... 
+                    (inputSize(2)/512).*poly_y];
        if flip_direction == 1
            poly = moved_POS;
        end
        if flip_direction == 2
-           new_pos = (454/2)*[1;1;1;1 ]-moved_POS(:,1);
-           poly = [(454/2)*[1;1;1;1]+new_pos,moved_POS(:,2)];
+           new_pos = (inputSize(1)/2)*[1;1;1;1 ]-moved_POS(:,1);
+           poly = [(inputSize(1)/2)*[1;1;1;1]+new_pos,moved_POS(:,2)];
        end
        if flip_direction == 3
-           new_pos = (454/2)*[1;1;1;1 ]-moved_POS(:,2);
-           poly = [moved_POS(:,1),(454/2)*[1;1;1;1]+new_pos];
+           new_pos = (inputSize(2)/2)*[1;1;1;1 ]-moved_POS(:,2);
+           poly = [moved_POS(:,1),(inputSize(2)/2)*[1;1;1;1]+new_pos];
        end
        if flip_direction == 4
-           new_pos = (454/2)*[1 1;1 1;1 1;1 1]-moved_POS;
-           poly = (454/2)*[1 1;1 1;1 1;1 1]+new_pos;
+           new_pos = (inputSize(1)/2)*[1 1;1 1;1 1;1 1]-moved_POS;
+           poly = (inputSize(1)/2)*[1 1;1 1;1 1;1 1]+new_pos;
        end
        %lbl(data_count).poly = poly;    
        %poly = label(i_label).poly;
