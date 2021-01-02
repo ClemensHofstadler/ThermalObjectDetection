@@ -120,6 +120,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
     for i_scene = 1:length(scene_struct)
         % getting the z for the entire scene
         z = getAGL(scene_struct(i_scene).name);
+        drift = -getDrift(scene_struct(i_scene).name);
         try
             folder = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Images');
             seq_struct = LoadStructureFolderInFolderFiltered(folder, '');
@@ -204,6 +205,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                         % M(4,:) = [0, 0, 0, 1];
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
+                        t(1) = t(1) + drift * (i_label - i);
                         lab_struct(i_lab).labels = label_mid_struct;
                         % for each label bounding box in mid image label definition...
                         for i_bb = 1:length(label_mid_struct)
