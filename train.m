@@ -12,7 +12,7 @@ initialLearnRate = 1e-3;
 learnRateDropFactor = 0.1;
 learnRateDropPeriod = 20;
 shuffleFrequency = 'every-epoch';
-executionEnvironment = 'auto';
+executionEnvironment = 'cpu';
 
 [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
 
@@ -194,18 +194,20 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 lab_struct = pos_struct;
                 lab_struct = rmfield(lab_struct, 'M3x4');
                 lab_struct(end).labels = [];
+                i = 1;
                 for i_lab = 1:length(lab_struct)
                     try
                         % only for testing
-                        if (i_scene == 8 && i_seq == 5 && i_lab == 16)
-                            i_lab = i_lab;
-                        end
+                        %if (i_scene == 8 && i_seq == 5 && i_lab == 16)
+                        %    i_lab = i_lab;
+                        %end
                         
                         M = rel_pos_struct(i_lab).M3x4;
                         % M(4,:) = [0, 0, 0, 1];
                         R = rel_pos_struct(i_lab).M3x4(1:3,1:3)';
                         t = rel_pos_struct(i_lab).M3x4(1:3,4)';
                         t(1) = t(1) + drift * (i_label - i);
+                        i = i + 1;
                         lab_struct(i_lab).labels = label_mid_struct;
                         % for each label bounding box in mid image label definition...
                         for i_bb = 1:length(label_mid_struct)
