@@ -5,7 +5,7 @@
 % the network
 
 % these parameters you can play around with
-maxEpochs = 10;
+maxEpochs = 2;
 miniBatchSize  = 64;
 optimizer = 'adam';
 initialLearnRate = 20e-3;
@@ -164,6 +164,10 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                 poses_file_path = fullfile(scene_struct(i_scene).folder, scene_struct(i_scene).name, 'Poses', append(seq_struct(i_seq).name, '.json'));
                 pos_struct = jsondecode(fileread(poses_file_path));
                 pos_struct = pos_struct.images;
+                % kicking out images for which there are no poses
+                if (length(pos_struct) < length(img_struct))
+                    img_struct(end) = [];
+                end
                 % calculate relative poses
                 rel_pos_struct = pos_struct;
                 try
