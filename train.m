@@ -5,20 +5,26 @@
 % the network
 
 % these parameters you can play around with
-maxEpochs = 2;
-miniBatchSize  = 64;
+maxEpochs = 5;
+miniBatchSize  = 32;
 optimizer = 'adam';
 initialLearnRate = 20e-3;
-learnRateDropFactor = 0.1;
+learnRateDropFactor = 0.02;
 learnRateDropPeriod = 20;
 shuffleFrequency = 'every-epoch';
 executionEnvironment = 'cpu';
 
 [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
+[X_test,Y_test] = prepareData(data_root_folder, 'T', inputSize, gridSize);
+
+validationData = {X_test(1:2:end),Y_test(1:2:end)};
+validationFreq = floor(length(X)/miniBatchSize);
 
 options = trainingOptions(optimizer, ...
     'MiniBatchSize',miniBatchSize, ...
     'MaxEpochs',maxEpochs, ...
+    'ValidationData',validationData, ...
+    'ValidationFrequency',validationFreq, ...
     'InitialLearnRate',initialLearnRate, ...
     'LearnRateSchedule','piecewise', ...
     'LearnRateDropFactor',learnRateDropFactor, ...
