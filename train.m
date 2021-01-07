@@ -9,10 +9,11 @@ maxEpochs = 5;
 miniBatchSize  = 32;
 optimizer = 'adam';
 initialLearnRate = 20e-3;
-learnRateDropFactor = 0.02;
+learnRateDropFactor = 0.1;
 learnRateDropPeriod = 20;
 shuffleFrequency = 'every-epoch';
 executionEnvironment = 'cpu';
+
 
 [X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
 [X_test,Y_test] = prepareData(data_root_folder, 'T', inputSize, gridSize);
@@ -20,12 +21,13 @@ executionEnvironment = 'cpu';
 validationData = {X_test(1:2:end),Y_test(1:2:end)};
 validationFreq = floor(length(X)/miniBatchSize);
 
+
 options = trainingOptions(optimizer, ...
     'MiniBatchSize',miniBatchSize, ...
     'MaxEpochs',maxEpochs, ...
+    'InitialLearnRate',initialLearnRate, ...
     'ValidationData',validationData, ...
     'ValidationFrequency',validationFreq, ...
-    'InitialLearnRate',initialLearnRate, ...
     'LearnRateSchedule','piecewise', ...
     'LearnRateDropFactor',learnRateDropFactor, ...
     'LearnRateDropPeriod',learnRateDropPeriod, ...
@@ -50,8 +52,8 @@ function labelGrid = generateLabelGrid(label,inputSize,gridSize)
             y_max = max(label(:,2,i_label));
             for i = 1:boxes_per_line
                 for j = 1:boxes_per_line
-                    left_right_inside_box = floor(x_min/s) <= i && i <= ceil(x_max/s);
-                    up_down_inside_box = floor(y_min/s) <= j && j <= ceil(y_max/s);  
+                    left_right_inside_box = floor(x_min/s) < j && j <= ceil(x_max/s);
+                    up_down_inside_box = floor(y_min/s) < i && i <= ceil(y_max/s);   
                     if left_right_inside_box && up_down_inside_box
                         currentGrid(i,j) = 1;
                     end
