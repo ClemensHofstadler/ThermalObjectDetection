@@ -8,20 +8,43 @@ function nmsProposalStruct = nonMaximumSupression(proposalStruct)
 %Link to resource:
 %https://towardsdatascience.com/non-maximum-suppression-nms-93ce178e177c
 
+
+%% Preprocessing
+%struct with bbs and confidences where the confidence is above a chosen
+%threshold
+filterThreshold = 0.1;
+
+[lenPropStruct, ~] = size(proposalStruct.bbs);
+filteredStruct.bbs = [];
+filteredStruct.confidences = [];
+filteredCounter = 1; 
+
+for i=1 : lenPropStruct
+    bi = proposalStruct.bbs(i,:);
+    ci = proposalStruct.confidences(i);
+    
+    if ci > filterThreshold
+        filteredStruct.bbs(filteredCounter,:) = bi;
+        filteredStruct.confidences(filteredCounter) = ci;
+        filteredCounter = filteredCounter + 1;
+    end
+end
+
+%% The actual NMS
 threshold = 0.5;
 nmsProposalStruct.bbs = [];
 nmsProposalStruct.confidences = [];
 nmsProposalCounter = 1;
-[lenBbs, ~] = size(proposalStruct.bbs);
+[lenFilteredStruct, ~] = size(filteredStruct.bbs);
 
-for i=1 : lenBbs    
+for i=1 : lenFilteredStruct    
     discard = false;
-    bi = proposalStruct.bbs(i,:);
-    ci = proposalStruct.confidences(i);
+    bi = filteredStruct.bbs(i,:);
+    ci = filteredStruct.confidences(i);
     
-    for j = 1 : lenBbs
-        bj = proposalStruct.bbs(j,:);
-        cj = proposalStruct.confidences(j);
+    for j = 1 : lenFilteredStruct
+        bj = filteredStruct.bbs(j,:);
+        cj = filteredStruct.confidences(j);
         %calculate Intersecion Over Union
     iou = bboxOverlapRatio(bi, bj, 'Union');
         if iou > threshold
@@ -38,6 +61,5 @@ for i=1 : lenBbs
         nmsProposalCounter = nmsProposalCounter +1;
     end
 end
-
 end
 
