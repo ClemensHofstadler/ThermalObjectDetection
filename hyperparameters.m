@@ -1,6 +1,6 @@
 % Imports and cleaning up
 addpath 'util';
-clear all; clc; close all;
+%clear all; clc; close all;
 
 % Folders that have to be set individually
 data_root_folder = './';
@@ -10,14 +10,12 @@ scene_filter = 'F';
 %---- IDEALLY THESE HYPERPARAMETERS CAN BE OPTIMIZED DURING TRAINING ------
 % Input size of our images - W x H x Color dimension (2nd color dimension
 % to 'hide' the relative poses)
-inputSize = [227 227 2];
-% Number of hidden units in the RNN layers (500 is probably on the very low
-% end but I don't have enough RAM to use more units here)
-numHiddenUnits1 = 500;
-numHiddenUnits2 = 500;
+inputSize = [227 227 1];
+% Number of hidden units in the RNN layers
+numHiddenUnits = 2048;
 % divide image into several grids of boxes and regress 
 % confidene for each box in each grid 
-gridSize = [5, 13];
+gridSize = [6];
 % widths and heights of anchor boxes
 anchorBoxes = [gridSize
                 gridSize]';

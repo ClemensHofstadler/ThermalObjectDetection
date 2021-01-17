@@ -24,9 +24,9 @@ classdef splitInputLayer < nnet.layer.Layer
             % Z = predict(layer, X) forwards the input data X through the
             % layer and outputs the results Z1, Z2.
   
-            % X = (w,h,2,batchSize,seq_length)
-            Z1 = X(:,:,1,:,:);
-            Z2 = X(1:3,1:4,2,:,:);
+            % X = (w,h,1,batchSize,seq_length)
+            Z1 = X(1:227,:,:,:,:);
+            Z2 = X(228,1:12,:,:,:);
         end
     end
 end
