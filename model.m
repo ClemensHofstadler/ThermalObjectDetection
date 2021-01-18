@@ -2,104 +2,84 @@
 layersPreCNN = [ ...
     %%%% INPUT PREP %%%%%
     % input layer - defines size of our pictures
-    sequenceInputLayer(inputSize,'Name','my_input_images')
+    sequenceInputLayer(inputSize + [1 0 0],'Name','my_input_images','Normalization','zerocenter')
     % convert the sequences of images to an array of images
-    sequenceFoldingLayer('Name','my_fold')
+    sequenceFoldingLayer('Name','foldInput')
     ];
     
 %%%% CNN %%%%%
 % apply our CNN independently to each time step
 % we define the CNN seperately
-lgraph_yolo = setUpYolo(anchorBoxes);
+lgraph_cnn = setUpCNN();
     
 %%%% RNN $$$$$
 layersRNN = [...
-    bilstmLayer(numHiddenUnits1,'OutputMode','sequence','Name','my_bilstm1')
-    reluLayer('Name','my_relu1')
-    dropoutLayer(0.2,'Name','my_drop1')
-    bilstmLayer(numHiddenUnits2,'OutputMode','sequence','Name','my_bilstm2')
-    reluLayer('Name','my_relu2')
-    dropoutLayer(0.2,'Name','my_drop2')
-    
-    %%% OUTPUT REGRESSION %%%%%
-    fullyConnectedLayer(numOutputs,'Name','my_fc')
-    sigmoidLayer('Name','my_sigmoid')
-    regressionLayer('Name','my_regression')];
+    batchNormalizationLayer('Name','batchnormRNN')
+    bilstmLayer(numHiddenUnits,'OutputMode','last','Name','bilstm')
+    reluLayer('Name','reluRNN')
+    dropoutLayer(0.5,'Name','dropoutRNN')
+    %%% OUTPUT LAYERS %%%%%
+    fullyConnectedLayer(numOutputs,'Name','fc')
+    sigmoidLayer('Name','sigmoid')
+    CELoss('ceLoss')];
 
 % add pre CNN part and connect
-net = addLayers(lgraph_yolo,layersPreCNN);
+net = addLayers(lgraph_cnn,layersPreCNN);
 
 % add all additional layers
+% layers for detection heads
+unfoldLayer1 = sequenceUnfoldingLayer('Name','unfoldHead1');
+flattenLayer1 = flattenLayer('Name','flattenHead1');
+unfoldLayer2 = sequenceUnfoldingLayer('Name','unfoldHead2');
+flattenLayer2 = flattenLayer('Name','flattenHead2');
+net = addLayers(net,[unfoldLayer1
+  flattenLayer1]);
+net = addLayers(net,[unfoldLayer2
+  flattenLayer2]);
 % layers for poses
 splitLayer = splitInputLayer('splitInput');
-unfoldLayer3 = sequenceUnfoldingLayer('Name','my_unfold_3');
-flattenLayer3 = flattenLayer('Name','my_flatten_3');
+unfoldLayer3 = sequenceUnfoldingLayer('Name','unfoldPoses');
+flattenLayer3 = flattenLayer('Name','flattenPoses');
 net = addLayers(net,splitLayer);
 net = addLayers(net,[unfoldLayer3
     flattenLayer3]);
 % concatenation layer
-concatLayer = concatenationLayer(1,3,'Name','my_concat');
+concatLayer = concatenationLayer(1,3,'Name','concat');
 net = addLayers(net,concatLayer);
 % RNN
 net = addLayers(net,layersRNN);
 
 % connect the two output heads
-unfoldLayer1 = sequenceUnfoldingLayer('Name','my_unfold_1');
-flattenLayer1 = flattenLayer('Name','my_flatten_1');
-unfoldLayer2 = sequenceUnfoldingLayer('Name','my_unfold_2');
-flattenLayer2 = flattenLayer('Name','my_flatten_2');
-net = addLayers(net,[unfoldLayer1
-  flattenLayer1]);
-net = connectLayers(net,'conv2Detection1','my_unfold_1/in');
-net = addLayers(net,[unfoldLayer2
-  flattenLayer2]);
-net = connectLayers(net,'conv2Detection2','my_unfold_2/in');
-net = connectLayers(net,'my_fold/miniBatchSize','my_unfold_1/miniBatchSize');
-net = connectLayers(net,'my_fold/miniBatchSize','my_unfold_2/miniBatchSize');
+net = connectLayers(net,'tanhDetection1','unfoldHead1/in');
+net = connectLayers(net,'tanhDetection2','unfoldHead2/in');
+net = connectLayers(net,'foldInput/miniBatchSize','unfoldHead1/miniBatchSize');
+net = connectLayers(net,'foldInput/miniBatchSize','unfoldHead2/miniBatchSize');
 
 % connect poses layers
-net = connectLayers(net,'my_fold/out','splitInput');
+net = connectLayers(net,'foldInput/out','splitInput');
 net = connectLayers(net,'splitInput/out1','conv1');
-net = connectLayers(net,'splitInput/out2', 'my_unfold_3/in');
-net = connectLayers(net,'my_fold/miniBatchSize','my_unfold_3/miniBatchSize');
+net = connectLayers(net,'splitInput/out2', 'unfoldPoses/in');
+net = connectLayers(net,'foldInput/miniBatchSize','unfoldPoses/miniBatchSize');
 
 % connect concat layer
-net = connectLayers(net,'my_flatten_1','my_concat/in1');
-net = connectLayers(net,'my_flatten_2','my_concat/in2');
-net = connectLayers(net, 'my_flatten_3','my_concat/in3');
+net = connectLayers(net,'flattenHead1','concat/in1');
+net = connectLayers(net,'flattenHead2','concat/in2');
+net = connectLayers(net, 'flattenPoses','concat/in3');
 
 % connect RNN
-net = connectLayers(net,'my_concat','my_bilstm1');
+net = connectLayers(net,'concat','batchnormRNN');
 
-
-function yolo = setUpYolo(anchorBoxes)
-% anchor boxes
-%rng(0)
-%trainingDataForEstimation = transform(trainingData, @(data)preprocessData(data, networkInputSize));
-%[anchorBoxes, meanIoU] = estimateAnchorBoxes(trainingDataForEstimation, numAnchors);
-area = anchorBoxes(:, 1).*anchorBoxes(:, 2);
-[~, idx] = sort(area, 'descend');
-anchorBoxes = anchorBoxes(idx, :);
-anchorBoxMasks = {[1]
-    [2]};
-
+function lgraph = setUpCNN()
 %Feature extraction network
 baseNetwork = squeezenet();
 lgraph = squeezenetFeatureExtractor(baseNetwork);
 
-classNames = {'person'};
-numClasses = size(classNames, 2);
-numPredictorsPerAnchor = 5 + numClasses;
-
 % Add detection heads to the feature extraction network
-lgraph = addFirstDetectionHead(lgraph, anchorBoxMasks{1}, numPredictorsPerAnchor);
-lgraph = addSecondDetectionHead(lgraph, anchorBoxMasks{2}, numPredictorsPerAnchor);
-lgraph = connectLayers(lgraph, 'fire9-concat', 'conv1Detection1');
-lgraph = connectLayers(lgraph, 'relu1Detection1', 'upsample1Detection2');
+lgraph = addFirstDetectionHead(lgraph);
+lgraph = addSecondDetectionHead(lgraph);
+lgraph = connectLayers(lgraph, 'fire9-concat', 'batchnorm_head1');
+lgraph = connectLayers(lgraph, 'relu1Detection1', 'batchnorm_head2');
 lgraph = connectLayers(lgraph, 'fire5-concat', 'depthConcat1Detection2/in2');
-
-
-yolo = lgraph;
 end
 
 function lgraph = squeezenetFeatureExtractor(net)
@@ -113,34 +93,37 @@ conv1Layer = convolution2dLayer(3,64,'Stride',2,'Padding','same','Name','conv1')
 lgraph = replaceLayer(lgraph,'conv1',conv1Layer);
 end
 
-function lgraph = addFirstDetectionHead(lgraph,anchorBoxMasks,numPredictorsPerAnchor)
+function lgraph = addFirstDetectionHead(lgraph)
 % The addFirstDetectionHead function adds the first detection head.
 
-numAnchorsScale1 = size(anchorBoxMasks, 2);
 % Compute the number of filters for last convolution layer.
-numFilters = numAnchorsScale1*numPredictorsPerAnchor;
 firstDetectionSubNetwork = [
+    batchNormalizationLayer('Name','batchnorm_head1');
     convolution2dLayer(3,256,'Padding','same','Name','conv1Detection1','WeightsInitializer','he')
     reluLayer('Name','relu1Detection1')
-    convolution2dLayer(1,numFilters,'Padding','same','Name','conv2Detection1','WeightsInitializer','he')
+    convolution2dLayer(1,4,'Padding','same','Name','conv2Detection1','WeightsInitializer','he')
+    batchNormalizationLayer('Name','batchnormDetection1')
+    fullyConnectedLayer(512,'Name','fcDetection1')
+    tanhLayer('Name','tanhDetection1')
     ];
 lgraph = addLayers(lgraph,firstDetectionSubNetwork);
 end
 
-function lgraph = addSecondDetectionHead(lgraph,anchorBoxMasks,numPredictorsPerAnchor)
+function lgraph = addSecondDetectionHead(lgraph)
 % The addSecondDetectionHead function adds the second detection head.
 
-numAnchorsScale2 = size(anchorBoxMasks, 2);
 % Compute the number of filters for the last convolution layer.
-numFilters = numAnchorsScale2*numPredictorsPerAnchor;
-    
-secondDetectionSubNetwork = [
+    secondDetectionSubNetwork = [
+    batchNormalizationLayer('Name','batchnorm_head2');
     upsampleLayer(2,'upsample1Detection2')
     depthConcatenationLayer(2, 'Name', 'depthConcat1Detection2');
     convolution2dLayer(3,128,'Padding','same','Name','conv1Detection2','WeightsInitializer','he')
-    averagePooling2dLayer(2,'Stride',2,'Name','avgPool')
+    %averagePooling2dLayer(2,'Stride',2,'Name','avgPool')
     reluLayer('Name','relu1Detection2')
-    convolution2dLayer(1,numFilters,'Padding','same','Name','conv2Detection2','WeightsInitializer','he')
+    convolution2dLayer(1,2,'Padding','same','Name','conv2Detection2','WeightsInitializer','he')
+    batchNormalizationLayer('Name','batchnormDetection2')
+    fullyConnectedLayer(1024,'Name','fcDetection2')
+    tanhLayer('Name','tanhDetection2')
     ];
 lgraph = addLayers(lgraph,secondDetectionSubNetwork);
 end

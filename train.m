@@ -8,32 +8,61 @@
 maxEpochs = 5;
 miniBatchSize  = 32;
 optimizer = 'adam';
-initialLearnRate = 20e-3;
+initialLearnRate = 1e-3;
 learnRateDropFactor = 0.1;
-learnRateDropPeriod = 20;
+learnRateDropPeriod = 6;
 shuffleFrequency = 'every-epoch';
 executionEnvironment = 'cpu';
+checkpointPath = './checkpoints';
 
+folder = loadData(data_root_folder, scene_filter);
+data = dta_loader(folder, inputSize);
 
-[X,Y] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
-[X_test,Y_test] = prepareData(data_root_folder, 'T', inputSize, gridSize);
+[X_train,Y_train] = prepDataAux(data,inputSize,gridSize);
+[X_test,ytest] = prepareData(data_root_folder, 'T', inputSize, gridSize);
 
-validationData = {X_test(1:2:end),Y_test(1:2:end)};
+X = cell(3*length(X_train),1);
+Y = zeros(3*length(X_train),numOutputs);
+for i = 1:length(X_train)
+    seq = X_train{i};
+    mid = ceil(size(seq,4)/2);
+    
+    X{3*i-2} = normalize(seq(:,:,:,mid-5:mid+5));
+    Y(3*i-2,:) = Y_train{i}(:,mid);
+    
+    X{3*i-1} = normalize(seq(:,:,:,mid-12:2:mid+12));
+    Y(3*i-1,:) = Y_train{i}(:,mid);
+    
+    offset = randi([-5 5]);
+    X{3*i} = normalize(seq(:,:,:,mid-7+offset:mid+7+offset));
+    Y(3*i,:) = Y_train{i}(:,mid+offset);
+end
+
+Y_test = zeros(length(X_test),numOutputs);
+for i = 1:length(X_test)
+    seq = X_test{i};
+    mid = ceil(size(seq,4)/2);
+    X_test{i} = normalize(seq(:,:,:,mid-6:mid+6));
+    Y_test(i,:) = ytest{i}(:,mid);
+end
+
+validationData = {X_test(1:3:end),Y_test(1:3:end,:)};
 validationFreq = floor(length(X)/miniBatchSize);
-
-
+  
 options = trainingOptions(optimizer, ...
     'MiniBatchSize',miniBatchSize, ...
     'MaxEpochs',maxEpochs, ...
     'InitialLearnRate',initialLearnRate, ...
-    'ValidationData',validationData, ...
-    'ValidationFrequency',validationFreq, ...
-    'LearnRateSchedule','piecewise', ...
     'LearnRateDropFactor',learnRateDropFactor, ...
-    'LearnRateDropPeriod',learnRateDropPeriod, ...
+    'LearnRateDropPeriod',learnRateDropPeriod,...
     'Shuffle',shuffleFrequency, ...
     'Plots','training-progress', ...
     'ExecutionEnvironment',executionEnvironment,...
+    'SequencePaddingDirection','left',...
+    'SequenceLength','longest',...
+    'CheckpointPath',checkpointPath,...
+    'ValidationData',validationData, ...
+    'ValidationFrequency',validationFreq, ...
     'Verbose',false);
 
 % run this command to train the network
@@ -93,12 +122,12 @@ function [X,Y] = prepDataAux(data, inputSize, gridSize)
         for j = 1:length(current_folder)
         	current_seq = current_folder(j);
             seq_len = size(current_seq.image,2);
-            current_X = zeros([inputSize seq_len]);
+            current_X = zeros([inputSize seq_len] + [1 0 0 0]);
             current_Y = zeros([numOutputs seq_len]);  
             % save images in first dimension and relative poses in second
             % dimension
-            current_X(:,:,1,:) = permute(current_seq.image,[3 4 2 1]);
-            current_X(1:3,1:4,2,:) = permute(current_seq.cam_param,[3 4 2 1]);
+            current_X(1:227,:,:,:) = permute(current_seq.image,[3 4 2 1]);
+            current_X(228,1:12,:,:) = permute(reshape(current_seq.cam_param,[1 1 seq_len 12]),[1 4 2 3]);
             % generate label grid and save it
             for k = 1:seq_len
                 if ~isempty(current_seq.poly{k})
@@ -182,11 +211,7 @@ function sceneStruct = loadData(data_root_folder, scene_filter)
                     try 
                         i_label = find(ismember({pos_struct.imagefile}, label_mid_struct(1).imagefile));
                     catch ee
-                        if mod(length(pos_struct), 2) == 0
-                            i_label = int8(length(pos_struct) / 2.0);
-                        else
-                            i_label = 1 + int8(length(pos_struct) / 2.0);
-                        end
+                            i_label = ceil(length(pos_struct) / 2);
                     end
                     R_lab = pos_struct(i_label).M3x4(1:3,1:3)';
                     t_lab = pos_struct(i_label).M3x4(1:3,4)';
