@@ -1,4 +1,8 @@
-# Computer-Vision
+# Thermal Image Object Detection for Search and Rescue Operations
+
+This is the Matlab Coded needed to reproduce the results described in this blog post
+
+This work was a joint project done together with Jakob Geringer, Horst Gruber, and Shahed Masoudian.
 
 ## Scaling 
 all picture was scaled to 454*454 in order to be fed to the system and K which is matrix intrinsic was also scaled by the same amount , other than that Z which was used to calculate the transfer of the data was also scaled by the same amount. 
