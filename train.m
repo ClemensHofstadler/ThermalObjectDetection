@@ -1,53 +1,22 @@
-% FIRST: define the hyperparameters by running the hyperparameters.m script
-% THEN: load/setup the net by running the model.m script
-% THEN: rund this script to set up everything for training
-% THEN: run trained_net = trainNetwork(X,Y,net,options); to actually train
-% the network
-
-% these parameters you can play around with
-maxEpochs = 5;
-miniBatchSize  = 32;
-optimizer = 'adam';
-initialLearnRate = 1e-3;
-learnRateDropFactor = 0.1;
-learnRateDropPeriod = 6;
-shuffleFrequency = 'every-epoch';
-executionEnvironment = 'cpu';
-checkpointPath = './checkpoints';
-
-folder = loadData(data_root_folder, scene_filter);
-data = dta_loader(folder, inputSize);
-
-[X_train,Y_train] = prepDataAux(data,inputSize,gridSize);
-[X_test,ytest] = prepareData(data_root_folder, 'T', inputSize, gridSize);
-
-X = cell(3*length(X_train),1);
-Y = zeros(3*length(X_train),numOutputs);
-for i = 1:length(X_train)
-    seq = X_train{i};
+% load data
+[xtrain,ytrain] = prepareData(data_root_folder, scene_filter, inputSize, gridSize);
+% do more data augmentation/normalization
+X_train = cell(3*length(xtrain),1);
+Y_train = zeros(3*length(xtrain),numOutputs);
+for i = 1:length(xtrain)
+    seq = xtrain{i};
     mid = ceil(size(seq,4)/2);
     
-    X{3*i-2} = normalize(seq(:,:,:,mid-5:mid+5));
-    Y(3*i-2,:) = Y_train{i}(:,mid);
+    X_train{3*i-2} = normalize(seq(:,:,:,mid-6:mid+6));
+    Y_train(3*i-2,:) = ytrain{i}(:,mid);
     
-    X{3*i-1} = normalize(seq(:,:,:,mid-12:2:mid+12));
-    Y(3*i-1,:) = Y_train{i}(:,mid);
+    X_train{3*i-1} = normalize(seq(:,:,:,mid-12:2:mid+12));
+    Y_train(3*i-1,:) = ytrain{i}(:,mid);
     
     offset = randi([-5 5]);
-    X{3*i} = normalize(seq(:,:,:,mid-7+offset:mid+7+offset));
-    Y(3*i,:) = Y_train{i}(:,mid+offset);
+    X_train{3*i} = normalize(seq(:,:,:,mid-6+offset:mid+6+offset));
+    Y_train(3*i,:) = ytrain{i}(:,mid+offset);
 end
-
-Y_test = zeros(length(X_test),numOutputs);
-for i = 1:length(X_test)
-    seq = X_test{i};
-    mid = ceil(size(seq,4)/2);
-    X_test{i} = normalize(seq(:,:,:,mid-6:mid+6));
-    Y_test(i,:) = ytest{i}(:,mid);
-end
-
-validationData = {X_test(1:3:end),Y_test(1:3:end,:)};
-validationFreq = floor(length(X)/miniBatchSize);
   
 options = trainingOptions(optimizer, ...
     'MiniBatchSize',miniBatchSize, ...
@@ -60,13 +29,10 @@ options = trainingOptions(optimizer, ...
     'ExecutionEnvironment',executionEnvironment,...
     'SequencePaddingDirection','left',...
     'SequenceLength','longest',...
-    'CheckpointPath',checkpointPath,...
-    'ValidationData',validationData, ...
-    'ValidationFrequency',validationFreq, ...
     'Verbose',false);
 
 % run this command to train the network
-% trained_net = trainNetwork(X,Y,net,options);
+% trained_net = trainNetwork(X_train,Y_train,net,options);
 
 function labelGrid = generateLabelGrid(label,inputSize,gridSize)
     % set up the label grid
@@ -126,8 +92,8 @@ function [X,Y] = prepDataAux(data, inputSize, gridSize)
             current_Y = zeros([numOutputs seq_len]);  
             % save images in first dimension and relative poses in second
             % dimension
-            current_X(1:227,:,:,:) = permute(current_seq.image,[3 4 2 1]);
-            current_X(228,1:12,:,:) = permute(reshape(current_seq.cam_param,[1 1 seq_len 12]),[1 4 2 3]);
+            current_X(1:inputSize(1),:,:,:) = permute(current_seq.image,[3 4 2 1]);
+            current_X(inputSize(1)+1,1:12,:,:) = permute(reshape(current_seq.cam_param,[1 1 seq_len 12]),[1 4 2 3]);
             % generate label grid and save it
             for k = 1:seq_len
                 if ~isempty(current_seq.poly{k})

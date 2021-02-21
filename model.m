@@ -10,7 +10,7 @@ layersPreCNN = [ ...
 %%%% CNN %%%%%
 % apply our CNN independently to each time step
 % we define the CNN seperately
-lgraph_cnn = setUpCNN();
+lgraph_cnn = setUpCNNsqueezenet();
     
 %%%% RNN $$$$$
 layersRNN = [...
@@ -69,7 +69,7 @@ net = connectLayers(net, 'flattenPoses','concat/in3');
 % connect RNN
 net = connectLayers(net,'concat','batchnormRNN');
 
-function lgraph = setUpCNN()
+function lgraph = setUpCNNsqueezenet()
 %Feature extraction network
 baseNetwork = squeezenet();
 lgraph = squeezenetFeatureExtractor(baseNetwork);
@@ -82,6 +82,19 @@ lgraph = connectLayers(lgraph, 'relu1Detection1', 'batchnorm_head2');
 lgraph = connectLayers(lgraph, 'fire5-concat', 'depthConcat1Detection2/in2');
 end
 
+function lgraph = setUpCNNdarkenet()
+%Feature extraction network
+baseNetwork = darknet19('Weights','none');
+lgraph = darknetFeatureExtractor(baseNetwork);
+
+% Add detection heads to the feature extraction network
+%lgraph = addFirstDetectionHead(lgraph);
+%lgraph = addSecondDetectionHead(lgraph);
+%lgraph = connectLayers(lgraph, 'leakyrelu50', 'batchnorm_head1');
+%lgraph = connectLayers(lgraph, 'relu1Detection1', 'batchnorm_head2');
+%lgraph = connectLayers(lgraph, 'conv53', 'depthConcat1Detection2/in2');
+end
+
 function lgraph = squeezenetFeatureExtractor(net)
 % The squeezenetFeatureExtractor function removes the layers after 'fire9-concat'
 % in SqueezeNet and also removes any data normalization used by the image input layer.
@@ -91,6 +104,13 @@ lgraph = layerGraph(net);
 lgraph = removeLayers(lgraph, {'data','drop9' 'conv10' 'relu_conv10' 'pool10' 'prob' 'ClassificationLayer_predictions'});
 conv1Layer = convolution2dLayer(3,64,'Stride',2,'Padding','same','Name','conv1');
 lgraph = replaceLayer(lgraph,'conv1',conv1Layer);
+end
+
+function lgraph = darknetFeatureExtractor(net)
+lgraph = layerGraph(net);
+lgraph = removeLayers(lgraph, {'input','softmax' 'output'});
+%conv1Layer = convolution2dLayer(3,64,'Stride',2,'Padding','same','Name','conv1');
+%lgraph = replaceLayer(lgraph,'conv1',conv1Layer);
 end
 
 function lgraph = addFirstDetectionHead(lgraph)

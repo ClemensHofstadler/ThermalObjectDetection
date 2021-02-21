@@ -17,7 +17,6 @@ classdef splitInputLayer < nnet.layer.Layer
             layer.Description = "Splits the input at the color-dimension.";
             
             layer.NumOutputs = 2;
-            
         end
         
         function [Z1,Z2] = predict(layer, X)

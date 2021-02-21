@@ -1,30 +1,30 @@
 % load test data
-%[X_test,Y_test] = loadEvaluationData(data_root_folder, inputSize, gridSize);
+[xTest,yTest] = loadEvaluationData(data_root_folder, inputSize, gridSize);
+
 % test data also contains augmented sequences
-% uncomment the next two lines if you want to remove the augmented seqs.
-% X_test = X_test(1:4:end);
-% Y_test = Y_test(1:4:end);
+% comment the next two lines if you want to also use the augmented seqs for evaluation.
+X_test = xTest(1:4:end);
+Y_test = yTest(1:4:end);
 
 % visualize allows you to visualize our predictions vs the real labels
 % only turn this on if you use a small subset of the data (like only 10-20 sequences)
 % red bbs = real labels
 % green bbs = our predictions
-visualize = true;
-%X_test = X_test(1:16);
-%Y_test = Y_test(1:16);
-
-% these hyperparameters you can play around with
-candidate_confidence = 0.15;
-iou_threshold = 0.1;
-evaluation_confidence = 0.09;
+visualize = false;
+       
+% normalize sequences as done during training
+for i = 1:length(X_test)
+   seq = X_test{i};
+   mid = ceil(size(seq,4)/2);
+   X_test{i} = seq(:,:,:,mid-6:mid+6);
+end
 
 % you need to have saved your network in the variable "trained_net"
 
 % eval returns [avgPrec FP TP GT]
-eval = ourEvaluate(trained_net, X_test, Y_test, gridSize, inputSize, candidate_confidence, iou_threshold, evaluation_confidence, visualize)
+eval = ourEvaluate(trained_net, X_test(1:10), Y_test(1:10), gridSize, inputSize, candidate_confidence, iou_threshold, visualize);
 
-
-function eval = ourEvaluate(net, X_test, Y_test, gridSize, inputSize, candidate_confidence, iou_threshold, evaluation_confidence, visualize)
+function eval = ourEvaluate(net, X_test, Y_test, gridSize, inputSize, candidate_confidence, iou_threshold, visualize)
     bboxes = cell(size(X_test,1),1);
     scores = cell(size(X_test,1),1);
     for i = 1:size(X_test,1)
@@ -36,7 +36,7 @@ function eval = ourEvaluate(net, X_test, Y_test, gridSize, inputSize, candidate_
     detections = table(bboxes,scores);
     gts = table(Y_test,'VariableNames',{'person'});
     
-    if visualize
+    if visualize && mod(i,2)
         for idx = 1:size(detections,1)
             seq = X_test{idx};
             mid = ceil(size(seq,4)/2);
@@ -44,35 +44,36 @@ function eval = ourEvaluate(net, X_test, Y_test, gridSize, inputSize, candidate_
 
             label = Y_test{idx};
             pred = bboxes{idx};
-
+            figure;
+            im = insertShape(im,'Rectangle',label,'Color','r');
+            im = insertShape(im,'Rectangle',pred,'Color','g');
             imshow(im,[]);
-            for j = 1:size(label,1)
-                drawpolygon('Position',bbToPolygon(label(j,:)),'Color','r');
-            end
-            for j = 1:size(pred,1)
-                drawpolygon('Position',bbToPolygon(pred(j,:)),'Color','g');
-            end
-            pause(0.8);
         end
     end
     
     
     %Average precision over all the detection results, returned as a numeric scalar or vector. 
-    avgPrec = evaluateDetectionPrecision(detections,gts,iou_threshold);
+    [avgPrec, recall, precision] = evaluateDetectionPrecision(detections,gts,iou_threshold);
+    
+    % plot precision recall curve
+    figure;
+    plot(recall, precision);
+    grid on
+    title(sprintf('Average precision = %.2f', avgPrec))
 
     % computes false and true positives, given detections, ground truths an iou and confidence threshold.
-    [FP, TP, GT] = computeFpTpFn(detections, gts, iou_threshold, evaluation_confidence );
+    [FP, TP, GT] = computeFpTpFn(detections, gts, iou_threshold, candidate_confidence*0.9);
     
     eval = [avgPrec, FP, TP, GT];
 end
 
 function [X,Y] = loadEvaluationData(data_root_folder, inputSize, gridSize)
     % load test data
-    folder_test = loadData(data_root_folder, 'F');
+    folder_test = loadData(data_root_folder, 'T');
     data_test = dta_loader(folder_test, inputSize);
     [X_test,~] = prepDataAux(data_test,inputSize,gridSize);
 
-    % normalize X data and remove the augmented sequences
+    % normalize X data
     X = cell(length(X_test),1);
     for i = 1:length(X)
         seq = X_test{i};
